@@ -278,7 +278,7 @@ It has precedence over function `projectile-project-name-function'."
   :type 'string
   :package-version '(projectile . "0.14.0"))
 
-(defcustom projectile-project-name-function 'projectile-default-project-name
+(defcustom projectile-project-name-function 'projectile-p4-project-name
   "A function that receives the project-root and returns the project name.
 
 If variable `projectile-project-name' is non-nil, this function will not be used."
@@ -322,6 +322,7 @@ The topmost match has precedence."
     "_FOSSIL_"    ; Fossil VCS root DB on Windows
     ".bzr"        ; Bazaar VCS root dir
     "_darcs"      ; Darcs VCS root dir
+    "P4CONFIG"    ; Perforce VCS root dir
     )
   "A list of files considered to mark the root of a project.
 The bottommost (parentmost) match has precedence."
@@ -927,6 +928,19 @@ A thin wrapper around `file-truename' that handles nil."
       (projectile-project-root)
     (error nil)))
 
+
+(defun projectile-p4-project-name (project-root)
+  "Get the project name for a p4 repo; will print codeline/branch and directorie"
+  (let ((cfgfile (concat project-root "configuration_id")))
+    (if (file-exists-p cfgfile)
+        (progn
+          (with-temp-buffer
+            (insert-file-contents cfgfile)
+            (concat (file-name-nondirectory (directory-file-name project-root)) " -> " (replace-regexp-in-string "\n" "" (buffer-string)    ))
+            ))
+      (file-name-nondirectory (directory-file-name project-root))
+      )))
+
 (defun projectile-default-project-name (project-root)
   "Default function used create project name to be displayed based on the value of PROJECT-ROOT."
   (file-name-nondirectory (directory-file-name project-root)))
@@ -1018,6 +1032,12 @@ Files are returned as relative paths to the project root."
   :group 'projectile
   :type 'string)
 
+(defcustom projectile-p4-command (concat "cat " projectile-project-root "SYNC.log | sed 's/.* //g' | tr '\\n' '\\0'" )
+  "Command used by projectile to get the files in a generic project."
+  :group 'projectile
+  :type 'string)
+
+
 (defcustom projectile-git-submodule-command "git submodule --quiet foreach 'echo $path' | tr '\\n' '\\0'"
   "Command used by projectile to get the files in git submodules."
   :group 'projectile
@@ -1077,6 +1097,7 @@ as defined in `vc.el'."
   (let ((vcs (projectile-project-vcs)))
     (cond
      ((eq vcs 'git) projectile-git-command)
+     ((eq vcs 'p4) projectile-p4-command)
      ((eq vcs 'hg) projectile-hg-command)
      ((eq vcs 'fossil) projectile-fossil-command)
      ((eq vcs 'bzr) projectile-bzr-command)
@@ -2313,6 +2334,7 @@ PROJECT-ROOT is the targeted directory.  If nil, use
    ((projectile-file-exists-p (expand-file-name ".bzr" project-root)) 'bzr)
    ((projectile-file-exists-p (expand-file-name "_darcs" project-root)) 'darcs)
    ((projectile-file-exists-p (expand-file-name ".svn" project-root)) 'svn)
+   ((projectile-file-exists-p (expand-file-name "P4CONFIG" project-root)) 'p4)
    ((projectile-locate-dominating-file project-root ".git") 'git)
    ((projectile-locate-dominating-file project-root ".hg") 'hg)
    ((projectile-locate-dominating-file project-root ".fslckout") 'fossil)
@@ -2320,6 +2342,7 @@ PROJECT-ROOT is the targeted directory.  If nil, use
    ((projectile-locate-dominating-file project-root ".bzr") 'bzr)
    ((projectile-locate-dominating-file project-root "_darcs") 'darcs)
    ((projectile-locate-dominating-file project-root ".svn") 'svn)
+   ((projectile-locate-dominating-file project-root "P4CONFIG") 'p4)
    (t 'none)))
 
 (defun projectile--test-name-for-impl-name (impl-file-path)
