@@ -774,7 +774,8 @@ at the top level of DIRECTORY."
      (lambda (dir)
        (when (and (file-directory-p dir)
                   (not (member (file-name-nondirectory dir) '(".." "."))))
-         (let ((default-directory dir))
+         (let ((default-directory dir)
+               (projectile-cached-project-root dir))
            (when (projectile-project-p)
              (projectile-add-known-project (projectile-project-root))))))
      subdirs)))
@@ -2930,6 +2931,10 @@ For hg projects `monky-status' is used if available."
               (with-no-warnings (magit-status project-root)))
              (t
               (vc-dir project-root))))
+      (p4
+       (if (fboundp 'p4-status)
+           (p4-status)
+         ))
       (hg
        (if (fboundp 'monky-status)
            (monky-status project-root)
