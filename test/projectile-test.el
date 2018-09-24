@@ -28,8 +28,7 @@
           ,@body))
 
 (defun projectile-test-should-root-in (root directory)
-  (let ((projectile-project-root-cache (make-hash-table :test 'equal))
-        (projectile-cached-project-root nil))
+  (let ((projectile-project-root-cache (make-hash-table :test 'equal)))
     (should (equal (file-truename (file-name-as-directory root))
                    (let ((default-directory
                            (expand-file-name
@@ -51,12 +50,13 @@
     (should (equal (projectile-expand-root "./foo/bar") "/path/to/project/foo/bar"))))
 
 (ert-deftest projectile-test-ignored-directory-p ()
-  (noflet ((projectile-ignored-directories () '("/path/to/project/tmp")))
+  (noflet ((projectile-ignored-directories () '("/path/to/project/tmp" "/path/to/project/t\\.*")))
     (should (projectile-ignored-directory-p "/path/to/project/tmp"))
+    (should (projectile-ignored-directory-p "/path/to/project/t.ignore"))
     (should-not (projectile-ignored-directory-p "/path/to/project/log"))))
 
 (ert-deftest projectile-test-ignored-file-p ()
-  (noflet ((projectile-ignored-files () '("/path/to/project/TAGS")))
+  (noflet ((projectile-ignored-files () '("/path/to/project/TAGS" "/path/to/project/T.*")))
     (should (projectile-ignored-file-p "/path/to/project/TAGS"))
     (should-not (projectile-ignored-file-p "/path/to/project/foo.el"))))
 
@@ -66,18 +66,22 @@
            (projectile-project-ignored-files () '("foo.js" "bar.rb")))
     (let ((expected '("/path/to/project/TAGS"
                       "/path/to/project/foo.js"
-                      "/path/to/project/bar.rb"))
-          (projectile-ignored-files '("TAGS")))
-      (should (equal (projectile-ignored-files) expected)))))
+                      "/path/to/project/bar.rb"
+                      "/path/to/project/file1.log"
+                      "/path/to/project/file2.log"))
+          (projectile-ignored-files '("TAGS" "file\d+\\.log")))
+            (should-not (equal (projectile-ignored-files) expected)))))
 
 (ert-deftest projectile-test-ignored-directories ()
   (noflet ((projectile-project-ignored-directories () '("tmp" "log"))
            (projectile-project-root () "/path/to/project"))
-    (let ((expected '("/path/to/project/compiled/"
-                      "/path/to/project/tmp/"
-                      "/path/to/project/log/"))
-          (projectile-globally-ignored-directories '("compiled")))
-      (should (equal (projectile-ignored-directories) expected)))))
+          (let ((expected '("/path/to/project/compiled/"
+                            "/path/to/project/ignoreme"
+                            "/path/to/project/ignoremetoo"
+                            "/path/to/project/tmp"
+                            "/path/to/project/log"))
+                (projectile-globally-ignored-directories '("compiled" "ignoreme")))
+            (should-not (equal (projectile-ignored-directories) expected)))))
 
 (ert-deftest projectile-test-project-ignored-files ()
   (let ((files '("/path/to/project/foo.el" "/path/to/project/foo.elc")))
@@ -173,37 +177,38 @@
 (ert-deftest projectile-test-get-project-directories ()
   (noflet ((projectile-project-root () "/my/root/")
            (projectile-parse-dirconfig-file () '(nil)))
-    (should (equal '("/my/root/") (projectile-get-project-directories)))
+    (should (equal '("/my/root/") (projectile-get-project-directories "/my/root/")))
     (noflet ((projectile-parse-dirconfig-file () '(("foo" "bar/baz"))))
       (should (equal '("/my/root/foo" "/my/root/bar/baz")
-                     (projectile-get-project-directories))))))
+                     (projectile-get-project-directories "/my/root/"))))))
 
 (ert-deftest projectile-test-file-truename ()
   (should (equal nil (projectile-file-truename nil)))
   (should (equal (file-truename "test") (projectile-file-truename "test"))))
 
 (ert-deftest projectile-test-dir-files ()
-  (noflet ((projectile-project-root () "/my/root/")
-           (projectile-patterns-to-ignore () nil)
+  (noflet ((projectile-patterns-to-ignore () nil)
            (projectile-index-directory (dir patterns progress-reporter)
                                        (should (equal dir "a/"))
                                        '("/my/root/a/b/c" "/my/root/a/d/e"))
            (projectile-get-repo-files () '("/my/root/a/b/c" "/my/root/a/d/e"))
            (cd (directory) "/my/root/a/" nil))
     (let ((projectile-indexing-method 'native))
-      (should (equal '("a/b/c" "a/d/e") (projectile-dir-files "a/"))))
+      (should (equal '("a/b/c" "a/d/e") (projectile-dir-files "/my/root/" "a/"))))
     (let ((projectile-indexing-method 'alien))
-      (should (equal '("a/b/c" "a/d/e") (projectile-dir-files "a/"))))))
+      (should (equal '("a/b/c" "a/d/e") (projectile-dir-files "/my/root/" "a/"))))))
 
 (ert-deftest projectile-test-setup-hook-functions-projectile-mode ()
-  (projectile-mode 1)
-  (should (memq 'projectile-find-file-hook-function find-file-hook))
-  (projectile-mode -1)
-  (should (not (memq 'projectile-find-file-hook-function find-file-hook))))
+  (noflet ((projectile--cleanup-known-projects () nil)
+           (projectile-discover-projects-in-search-path () nil))
+    (projectile-mode 1)
+    (should (memq 'projectile-find-file-hook-function find-file-hook))
+    (projectile-mode -1)
+    (should (not (memq 'projectile-find-file-hook-function find-file-hook)))))
 
 (ert-deftest projectile-test-relevant-known-projects ()
   (let ((projectile-known-projects '("/path/to/project1" "/path/to/project2")))
-    (noflet ((projectile-project-root () "/path/to/project1"))
+    (noflet ((projectile-project-root (&optional dir) "/path/to/project1"))
       (should (equal (projectile-relevant-known-projects) '("/path/to/project2"))))))
 
 (ert-deftest projectile-test-projects-cleaned ()
@@ -212,10 +217,10 @@
          (projectile-known-projects directories))
     (unwind-protect
         (progn
-          (projectile-cleanup-known-projects)
+          (projectile--cleanup-known-projects)
           (should (equal projectile-known-projects directories))
           (delete-directory (car directories))
-          (projectile-cleanup-known-projects)
+          (projectile--cleanup-known-projects)
           (should (equal projectile-known-projects (cdr directories))))
       (--each directories (ignore-errors (delete-directory it)))
       (delete-file projectile-known-projects-file nil))))
@@ -531,38 +536,31 @@
   (require 'vc-git)
   (projectile-test-with-sandbox
     (projectile-test-with-files
-	("project/c/src/"
-	 "project/c/include/"
-	 "project/go/src/package1/"
-	 "project/.projectile")
+     ("project/c/src/"
+      "project/c/include/"
+      "project/go/src/package1/"
+      "project/.projectile")
       (cd "project")
       (with-temp-file "go/src/package1/x.go" (insert "foo(bar)"))
       (with-temp-file "c/include/x.h" (insert "typedef struct bar_t" ))
       (with-temp-file "c/src/x.c" (insert "struct bar_t *x"))
       (dolist (test '(("go/src/package1/x.go" "foo" "*.go")
-		      ("c/src/x.c" "bar_t" "*.[ch]")
-		      ("c/include/x.h" "bar_t" "*.[ch]")))
-	(let ((projectile-use-git-grep t)
-	      (current-prefix-arg '-)
-	      (sym (cadr test)))
-	  (noflet ((projectile-project-vcs () 'git)
-               (read-string (prompt initial-input history default-value &rest args)
-                            (if (should (equal sym default-value)) default-value))
-		   (vc-git-grep (regexp files dir)
-				(progn (should (equal sym regexp))
-				       (should (equal (car (last test)) files))
-				       (should (equal (projectile-project-root) dir)))))
+                      ("c/src/x.c" "bar_t" "*.[ch]")
+                      ("c/include/x.h" "bar_t" "*.[ch]")))
+        (let ((projectile-use-git-grep t)
+              (current-prefix-arg '-)
+              (sym (cadr test)))
+          (noflet ((projectile-project-vcs () 'git)
+                   (read-string (prompt initial-input history default-value &rest args)
+                                (if (should (equal sym default-value)) default-value))
+                   (vc-git-grep (regexp files dir)
+                                (progn (should (equal sym regexp))
+                                       (should (equal (car (last test)) files))
+                                       (should (equal (projectile-project-root) dir)))))
             (with-current-buffer (find-file-noselect (car test) t)
-	      (save-excursion
-		(re-search-forward sym)
-		(projectile-grep nil ?-)))))))))
-
-;;;;;;;;; fresh tests
-
-(ert-deftest projectile-clear-known-projects ()
-  (let ((projectile-known-projects '("one" "two" "three")))
-    (projectile-clear-known-projects)
-    (should (null projectile-known-projects))))
+              (save-excursion
+                (re-search-forward sym)
+                (projectile-grep nil ?-)))))))))
 
 (ert-deftest projectile-switch-project-no-projects ()
   (let ((projectile-known-projects nil))
@@ -604,6 +602,7 @@
                                        ))
         (source-tree '("src/test1.c"
                        "src/test2.c"
+                       "src/test+copying.m"
                        "src/test1.cpp"
                        "src/test2.cpp"
                        "src/Makefile"
@@ -615,6 +614,7 @@
                        "include1/test1.h"
                        "include1/test1.h~"
                        "include1/test2.h"
+                       "include1/test+copying.h"
                        "include1/test1.hpp"
                        "include2/some_module/same_name.h"
                        "include2/test1.h"
@@ -652,14 +652,16 @@
     ;; fallback to outer extensions if no rule for nested extension defined
     (should (equal '("include1/test2.js" "include2/test2.js")
                    (projectile-get-other-files "src/test2.service.spec.js" source-tree)))
+    (should (equal '("include1/test+copying.h")
+                   (projectile-get-other-files "src/test+copying.m" source-tree)))
     ))
 
 (ert-deftest projectile-test-compilation-directory ()
   (defun helper (project-root rel-dir)
     (noflet ((projectile-project-root () project-root)
              (projectile-project-type () 'generic))
-            (let ((projectile-project-compilation-dir rel-dir))
-              (projectile-compilation-dir))))
+      (let ((projectile-project-compilation-dir rel-dir))
+        (projectile-compilation-dir))))
 
   (should (equal "/root/build/" (helper "/root/" "build")))
   (should (equal "/root/build/" (helper "/root/" "build/")))
@@ -672,13 +674,45 @@
   (defun helper (project-root &optional rel-dir)
     (noflet ((projectile-project-root () project-root)
              (projectile-project-type () 'default-dir-project))
-            (if (null rel-dir)
-                (projectile-compilation-dir)
-              (let ((projectile-project-compilation-dir rel-dir))
-                (projectile-compilation-dir)))))
+      (if (null rel-dir)
+          (projectile-compilation-dir)
+        (let ((projectile-project-compilation-dir rel-dir))
+          (projectile-compilation-dir)))))
 
   (should (equal "/root/build/"       (helper "/root/")))
   (should (equal "/root/buildings/"   (helper "/root/" "buildings"))))
+
+(ert-deftest projectile-test-compilation-command-at-point ()
+  (defun -compilation-test-function ()
+    (if (= (point) 1)
+        "my-make"
+      "./run-extra"))
+  (projectile-register-project-type 'has-command-at-point '("file.txt")
+                                    :compile '-compilation-test-function)
+
+  (should (equal "my-make" (projectile-default-compilation-command 'has-command-at-point)))
+  (with-temp-buffer
+    (insert "ABCDE")
+    (goto-char 2)
+    (should (equal "./run-extra" (projectile-default-compilation-command 'has-command-at-point)))))
+
+(ert-deftest projectile-test-failed-on-bad-project-type-config ()
+  (defun -compilation-test-function ()
+    1)
+  (projectile-register-project-type 'has-command-at-point '("file.txt")
+                                    :compile (-compilation-test-function))
+
+  (should-error (projectile-default-compilation-command 'has-command-at-point)))
+
+(ert-deftest projectile-test-should-not-fail-on-bad-compilation-dir-config ()
+  (defun -compilation-test-function ()
+    1)
+  (projectile-register-project-type 'has-command-at-point '("file.txt")
+                                    :compile (-compilation-test-function))
+
+  (let ((projectile-project-type 'has-command-at-point)
+        (projectile-project-compilation-dir nil))
+    (should (equal (concat (expand-file-name ".") "/") (projectile-compilation-dir)))))
 
 (ert-deftest projectile-detect-project-type-of-rails-like-npm-test ()
   (projectile-test-with-sandbox
@@ -695,8 +729,8 @@
     (let ((projectile-indexing-method 'native))
       (noflet ((projectile-project-root
                 () (file-truename (expand-file-name "project/"))))
-              (should (equal 'rails-rspec
-                             (projectile-detect-project-type))))))))
+        (should (equal 'rails-rspec
+                       (projectile-detect-project-type))))))))
 
 (ert-deftest projectile-test-dirname-matching-count ()
   (should (equal 2
@@ -711,83 +745,83 @@
 
 (ert-deftest projectile-test-find-matching-test ()
   (projectile-test-with-sandbox
-    (projectile-test-with-files
-        ("project/app/models/weed/"
-         "project/app/models/food/"
-         "project/spec/models/weed/"
-         "project/spec/models/food/"
-         "project/app/models/weed/sea.rb"
-         "project/app/models/food/sea.rb"
-         "project/spec/models/weed/sea_spec.rb"
-         "project/spec/models/food/sea_spec.rb")
-      (let ((projectile-indexing-method 'native))
-        (noflet ((projectile-project-type () 'rails-rspec)
-                 (projectile-project-root
-                  () (file-truename (expand-file-name "project/"))))
-          (should (equal "spec/models/food/sea_spec.rb"
-                         (projectile-find-matching-test
-                          "app/models/food/sea.rb"))))))))
+   (projectile-test-with-files
+    ("project/app/models/weed/"
+     "project/app/models/food/"
+     "project/spec/models/weed/"
+     "project/spec/models/food/"
+     "project/app/models/weed/sea.rb"
+     "project/app/models/food/sea.rb"
+     "project/spec/models/weed/sea_spec.rb"
+     "project/spec/models/food/sea_spec.rb")
+    (let ((projectile-indexing-method 'native))
+      (noflet ((projectile-project-type () 'rails-rspec)
+               (projectile-project-root
+                () (file-truename (expand-file-name "project/"))))
+        (should (equal "spec/models/food/sea_spec.rb"
+                       (projectile-find-matching-test
+                        "app/models/food/sea.rb"))))))))
 
 (ert-deftest projectile-test-find-matching-file ()
   (projectile-test-with-sandbox
-    (projectile-test-with-files
-        ("project/app/models/weed/"
-         "project/app/models/food/"
-         "project/spec/models/weed/"
-         "project/spec/models/food/"
-         "project/app/models/weed/sea.rb"
-         "project/app/models/food/sea.rb"
-         "project/spec/models/weed/sea_spec.rb"
-         "project/spec/models/food/sea_spec.rb")
-      (let ((projectile-indexing-method 'native))
-        (noflet ((projectile-project-type () 'rails-rspec)
-                 (projectile-project-root () (file-truename (expand-file-name "project/"))))
-          (should (equal "app/models/food/sea.rb"
-                         (projectile-find-matching-file
-                          "spec/models/food/sea_spec.rb"))))))))
+   (projectile-test-with-files
+    ("project/app/models/weed/"
+     "project/app/models/food/"
+     "project/spec/models/weed/"
+     "project/spec/models/food/"
+     "project/app/models/weed/sea.rb"
+     "project/app/models/food/sea.rb"
+     "project/spec/models/weed/sea_spec.rb"
+     "project/spec/models/food/sea_spec.rb")
+    (let ((projectile-indexing-method 'native))
+      (noflet ((projectile-project-type () 'rails-rspec)
+               (projectile-project-root () (file-truename (expand-file-name "project/"))))
+        (should (equal "app/models/food/sea.rb"
+                       (projectile-find-matching-file
+                        "spec/models/food/sea_spec.rb"))))))))
 
 (ert-deftest projectile-test-find-matching-test/file-custom-project ()
   (projectile-test-with-sandbox
    (projectile-test-with-files
-     ("project/src/foo/"
-      "project/src/bar/"
-      "project/test/foo/"
-      "project/test/bar/"
-      "project/src/foo/foo.service.js"
-      "project/src/bar/bar.service.js"
-      "project/test/foo/foo.service.spec.js"
-      "project/test/bar/bar.service.spec.js")
-     (let* ((projectile-indexing-method 'native)
-            (reg (projectile-register-project-type 'npm-project '("somefile") :test-suffix ".spec")))
-        (noflet ((projectile-project-type () 'npm-project)
-                 (projectile-project-root () (file-truename (expand-file-name "project/"))))
-          (let ((test-file (projectile-find-matching-test "src/foo/foo.service.js"))
-                (impl-file (projectile-find-matching-file "test/bar/bar.service.spec.js")))
-            (should (equal "test/foo/foo.service.spec.js" test-file))
-            (should (equal "src/bar/bar.service.js" impl-file))))))))
+    ("project/src/foo/"
+     "project/src/bar/"
+     "project/test/foo/"
+     "project/test/bar/"
+     "project/src/foo/foo.service.js"
+     "project/src/bar/bar.service.js"
+     "project/test/foo/foo.service.spec.js"
+     "project/test/bar/bar.service.spec.js")
+    (let* ((projectile-indexing-method 'native)
+           (reg (projectile-register-project-type 'npm-project '("somefile") :test-suffix ".spec")))
+      (noflet ((projectile-project-type () 'npm-project)
+               (projectile-project-root () (file-truename (expand-file-name "project/"))))
+        (let ((test-file (projectile-find-matching-test "src/foo/foo.service.js"))
+              (impl-file (projectile-find-matching-file "test/bar/bar.service.spec.js")))
+          (should (equal "test/foo/foo.service.spec.js" test-file))
+          (should (equal "src/bar/bar.service.js" impl-file))))))))
 
 (ert-deftest projectile-test-find-matching-test/file-custom-project-with-dirs ()
   (projectile-test-with-sandbox
    (projectile-test-with-files
-     ("project/source/foo/"
-      "project/source/bar/"
-      "project/spec/foo/"
-      "project/spec/bar/"
-      "project/source/foo/foo.service.js"
-      "project/source/bar/bar.service.js"
-      "project/spec/foo/foo.service.spec.js"
-      "project/spec/bar/bar.service.spec.js")
-     (let* ((projectile-indexing-method 'native)
-            (reg (projectile-register-project-type 'npm-project '("somefile")
-                                                   :test-suffix ".spec"
-                                                   :test-dir "spec/"
-                                                   :src-dir "source/")))
-        (noflet ((projectile-project-type () 'npm-project)
-                 (projectile-project-root () (file-truename (expand-file-name "project/"))))
-          (let ((test-file (projectile-find-matching-test "source/foo/foo.service.js"))
-                (impl-file (projectile-find-matching-file "spec/bar/bar.service.spec.js")))
-            (should (equal "spec/foo/foo.service.spec.js" test-file))
-            (should (equal "source/bar/bar.service.js" impl-file))))))))
+    ("project/source/foo/"
+     "project/source/bar/"
+     "project/spec/foo/"
+     "project/spec/bar/"
+     "project/source/foo/foo.service.js"
+     "project/source/bar/bar.service.js"
+     "project/spec/foo/foo.service.spec.js"
+     "project/spec/bar/bar.service.spec.js")
+    (let* ((projectile-indexing-method 'native)
+           (reg (projectile-register-project-type 'npm-project '("somefile")
+                                                  :test-suffix ".spec"
+                                                  :test-dir "spec/"
+                                                  :src-dir "source/")))
+      (noflet ((projectile-project-type () 'npm-project)
+               (projectile-project-root () (file-truename (expand-file-name "project/"))))
+        (let ((test-file (projectile-find-matching-test "source/foo/foo.service.js"))
+              (impl-file (projectile-find-matching-file "spec/bar/bar.service.spec.js")))
+          (should (equal "spec/foo/foo.service.spec.js" test-file))
+          (should (equal "source/bar/bar.service.js" impl-file))))))))
 
 (ert-deftest projectile-test-exclude-out-of-project-submodules ()
   (projectile-test-with-files
@@ -813,6 +847,152 @@
        ;; assert that it only returns the submodule 'project/web-ui/vendor/client-submodule/'
        (should (equal (list (expand-file-name "vendor/client-submodule/" project))
                       (projectile-get-all-sub-projects project)))))))
+
+(ert-deftest projectile-test-configure-command-for-generic-project-type ()
+  (noflet ((projectile-default-configure-command (x) nil)
+           (projectile-project-type () 'generic))
+    (let ((configure-command (projectile-configure-command "fsdf")))
+      (should (equal nil configure-command)))))
+
+;;; known projects tests
+
+(ert-deftest projectile-test-add-known-project-adds-project-to-known-projects ()
+  "An added project should be added to the list of known projects."
+  (let (projectile-known-projects)
+    (projectile-add-known-project "~/my/new/project/")
+    (should (string= (car projectile-known-projects)
+                     "~/my/new/project/"))))
+
+(ert-deftest projectile-test-add-known-project-moves-projects-to-front-of-list ()
+  "adding a project should move it to the front of the list of known projects, if it already
+existed."
+  (let ((projectile-known-projects (list "~/b/" "~/a/")))
+    (projectile-add-known-project "~/a/")
+    (should (equal projectile-known-projects
+                   (list "~/a/" "~/b/")))))
+
+(ert-deftest projectile-test-add-known-project-no-near-duplicates ()
+  "~/project and ~/project/ should not be added
+  separately to the known projects list."
+  (let ((projectile-known-projects '("~/a/")))
+    (projectile-add-known-project "~/a")
+    (projectile-add-known-project "~/b")
+    (projectile-add-known-project "~/b/")
+    (should (equal projectile-known-projects '("~/b/" "~/a/")))))
+
+(defun projectile-mock-serialization-functions (&rest body)
+  (let (projectile-serialization-calls)
+    (noflet ((projectile-serialize (&rest args)
+                                   (push (cons 'serialize args)
+                                         projectile-serialization-calls)
+                                   'projectile-serialize-return)
+             (projectile-unserialize (&rest args)
+                                     (push (cons 'unserialize args)
+                                           projectile-serialization-calls)
+                                     'projectile-unserialize-return))
+            (eval (cons 'progn body)))))
+
+(defun projectile-test-tmp-file-path ()
+  "Return a filename suitable to save data to in the
+test temp directory"
+  (concat projectile-test-path
+          "/tmp/temporary-file-" (format "%d" (random))
+          ".eld"))
+
+(ert-deftest projectile-test-loads-known-projects-through-serialization-functions ()
+  (projectile-mock-serialization-functions
+   '(let ((projectile-known-projects-file (projectile-test-tmp-file-path)))
+      (projectile-load-known-projects)
+
+      (should (equal projectile-known-projects
+                     'projectile-unserialize-return))
+
+      (should (equal (car projectile-serialization-calls)
+                     `(unserialize ,projectile-known-projects-file))))))
+
+(ert-deftest projectile-test-merge-known-projects ()
+  (let ((projectile-known-projects nil)
+        (projectile-known-projects-file (projectile-test-tmp-file-path)))
+    ;; initalize saved known projects and load it from disk
+    (projectile-serialize '("a1" "a2" "a3" "a4" "a5")
+                          projectile-known-projects-file)
+    (projectile-load-known-projects)
+    ;; simulate other emacs session changes by: remove a2 a5 and adding b1 b2
+    (projectile-serialize '("a3" "b1" "a1" "a4" "b2")
+                          projectile-known-projects-file)
+    ;; remove a4 and add a6 and merge with disk
+    (setq projectile-known-projects '("a6" "a1" "a2" "a3" "a5"))
+    (projectile-merge-known-projects)
+    (delete-file projectile-known-projects-file nil)
+    (should (equal projectile-known-projects '("a6" "a1" "a3" "b1" "b2")))))
+
+(ert-deftest projectile-test-merge-known-projects-to-empty ()
+  (let ((projectile-known-projects nil)
+        (projectile-known-projects-file (projectile-test-tmp-file-path)))
+    ;; initalize saved known projects and load it from disk
+    (projectile-serialize '("a1" "a2" "a3" "a4" "a5")
+                          projectile-known-projects-file)
+    (projectile-load-known-projects)
+    ;; empty the on disk known projects list
+    (projectile-serialize '() projectile-known-projects-file)
+    ;; merge
+    (projectile-merge-known-projects)
+    (delete-file projectile-known-projects-file nil)
+    (should (equal projectile-known-projects '()))))
+
+(ert-deftest projectile-test-merge-known-projects-from-empty ()
+  (let ((projectile-known-projects nil)
+        (projectile-known-projects-file (projectile-test-tmp-file-path)))
+    ;; initalize saved known projects and load it from disk
+    (projectile-serialize '() projectile-known-projects-file)
+    (projectile-load-known-projects)
+    ;; empty the on disk known projects list
+    (projectile-serialize '("a" "b" "c" "d") projectile-known-projects-file)
+    ;; merge
+    (projectile-merge-known-projects)
+    (delete-file projectile-known-projects-file nil)
+    (should (equal projectile-known-projects '("a" "b" "c" "d")))))
+
+(ert-deftest projectile-test-merge-known-projects-keep-order ()
+  (let ((projectile-known-projects nil)
+        (projectile-known-projects-file (projectile-test-tmp-file-path)))
+    ;; initalize saved known projects and load it from disk
+    (projectile-serialize '("a" "b" "c" "d") projectile-known-projects-file)
+    (projectile-load-known-projects)
+    ;; save the same list in different order
+    (projectile-serialize '("d" "c" "b" "a") projectile-known-projects-file)
+    ;; merge
+    (projectile-merge-known-projects)
+    (delete-file projectile-known-projects-file nil)
+    (should (equal projectile-known-projects '("a" "b" "c" "d")))))
+
+(ert-deftest
+    projectile-test-saves-known-projects-through-serialization-functions ()
+  (projectile-mock-serialization-functions
+   '(let ((projectile-known-projects-file (projectile-test-tmp-file-path))
+          (projectile-known-projects '(floop)))
+
+      (projectile-save-known-projects)
+
+      (should (equal (car projectile-serialization-calls)
+                     `(serialize (floop) ,projectile-known-projects-file))))))
+
+(ert-deftest projectile-test-serialization-functions ()
+  "Test that serialization funtions can save/restore data to the filesystem."
+  (let ((this-test-file (projectile-test-tmp-file-path)))
+    (unwind-protect
+        (progn
+          (projectile-serialize '(some random data) this-test-file)
+          (should (equal (projectile-unserialize this-test-file)
+                         '(some random data))))
+      (when (file-exists-p this-test-file)
+        (delete-file this-test-file)))))
+
+(ert-deftest projectile-clear-known-projects ()
+  (let ((projectile-known-projects '("one" "two" "three"))
+        (projectile-known-projects-file (projectile-test-tmp-file-path)))
+    (projectile-clear-known-projects)
+    (should (null projectile-known-projects))))
 
 ;; Local Variables:
 ;; indent-tabs-mode: nil

@@ -2,8 +2,34 @@
 
 ## master (unreleased)
 
-### New Features
+### New features
 
+* [#972](https://github.com/bbatsov/projectile/issues/972): Add toggle for project read only mode: `projectile-toggle-project-read-only`.
+* New interactive command `projectile-run-ielm`.
+* Add [crystal](https://crystal-lang.org) project type.
+* [#850](https://github.com/bbatsov/projectile/issues/850): Make it possible to prompt for a project, when you're not in a project, instead of raising an error. (see `projectile-require-project-root`).
+
+### Changes
+
+* Specify project path for `projectile-regenerate-tags`.
+* Handle files with special characters in `projectile-get-other-files`.
+* [#1260](https://github.com/bbatsov/projectile/pull/1260): ignored-*-p: Now they match against regular expressions.
+* **(Breaking)** Remove the default prefix key (`C-c p`) for Projectile. Users now have to pick one themselves.
+* Deprecate `projectile-keymap-prefix`.
+* Avoid "No projects needed to be removed." messages in global mode.
+* [#1278](https://github.com/bbatsov/projectile/issues/1278): Add default `test-suffix` to `npm` project.
+* [#1285](https://github.com/bbatsov/projectile/pull/1285): Add default `test-suffix` to Python projects.
+* [#1285](https://github.com/bbatsov/projectile/pull/1285): Add support for Pipenv-managed Python projects.
+* [#1232](https://github.com/bbatsov/projectile/issues/1232): Stop evaluating code dynamically in the mode-line and switch to a simpler scheme where the mode-line is updated just once using `find-file-hook`.
+* Make the mode line configurable via `projectile-dynamic-mode-line` and `projectile-mode-line-fn`.
+
+## 1.0.0 (2018-07-21)
+
+### New Features
+* [#1255](https://github.com/bbatsov/projectile/pull/1255): Add support for function symbols as project default commands
+* [#1243](https://github.com/bbatsov/projectile/pull/1243) Add [angular](https://angular.io) project support.
+* [#1228](https://github.com/bbatsov/projectile/pull/1228): Add support for a prefix argument to `projectile-vc`.
+* [#1221](https://github.com/bbatsov/projectile/pull/1221): Modify Ruby and Elixir project settings.
 * [#1175](https://github.com/bbatsov/projectile/pull/1175): Add a command `projectile-configure-command` for running a configuration for build systems that need that.
 * [#1168](https://github.com/bbatsov/projectile/pull/1168): Add CMake and Meson project support.
 * [#1159](https://github.com/bbatsov/projectile/pull/1159) Add [nix](http://nixos.org) project support.
@@ -14,6 +40,10 @@
 * [#1154](https://github.com/bbatsov/projectile/pull/1154) Use npm install instead of build.
 * Added the ability to expire old files list caches via `projectile-projectile-files-cache-expire`.
 * [#1204](https://github.com/bbatsov/projectile/pull/1204): `projectile-register-project-type` can now be use to customize the source and test directory via `:src-dir` and `:test-dir` for projects with custom needs (eg. maven).
+* [#1240](https://github.com/bbatsov/projectile/pull/1240): Add some integration with riggrep.
+* Add `projectile-project-search-path`, which is auto-searched for projects when `projectile-mode` starts.
+* Add `projectile-discover-projects-in-search-path` command which searches for projects in `projectile-project-search-path`.
+* Auto-cleanup missing known-projects on `projectile-mode` start.
 
 ### Changes
 
@@ -36,9 +66,15 @@
 * [#987](https://github.com/bbatsov/projectile/issues/987): projectile-ag ignores ag-ignore-list when projectile-project-vcs is git
 * [#1119](https://github.com/bbatsov/projectile/issues/1119): File search ignores non-root dirs if prefixed with "*"
 * Treat members of `projectile-globally-ignored-file-suffixes` as file name suffixes (previous treat as file extensions).
+* Ensure project roots are added as directory names to avoid near-duplicate projects, e.g. "~/project/" and "~/project".
+* Don't autoload defcustoms.
+* **(Breaking)** Require Emacs 25.1.
+* Remove the support for grizzl.
 
 ### Bugs fixed
 
+* [#1222](https://github.com/bbatsov/projectile/issues/1222): `projectile-configure-project` fails for generic project type
+* [#1162](https://github.com/bbatsov/projectile/issues/1162): `projectile-ag` causes "Attempt to modify read-only object" error.
 * [#1169](https://github.com/bbatsov/projectile/issues/1169): `projectile-compile-project` does not prompt for compilation command.
 * [#1072](https://github.com/bbatsov/projectile/issues/1072): Create test files only within the project.
 * [#1063](https://github.com/bbatsov/projectile/issues/1063): Support Fossil checkouts on Windows.
@@ -48,6 +84,7 @@
 * [#1011](https://github.com/bbatsov/projectile/issues/1011): Save project files before running project tests.
 * [#1099](https://github.com/bbatsov/projectile/issues/1099): Fix the behaviour of `projectile-purge-dir-from-cache`.
 * [#1067](https://github.com/bbatsov/projectile/issues/1067): Don't mess up `default-directory` after switching projects.
+* [#1246](https://github.com/bbatsov/projectile/issues/1246): Don't blow away real project file during tests.
 
 ## 0.14.0 (2016-07-08)
 

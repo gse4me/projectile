@@ -46,12 +46,14 @@ it. Some of Projectile's features:
 * visit project in dired
 * run make in a project with a single key chord
 * check for dirty repositories
+* toggle read-only mode for the entire project
 
 Here's a glimpse of Projectile in action:
 
 ![Projectile Screenshot](doc/screenshots/projectile.png)
 
 You can support my work on Projectile via
+ [PayPal](https://www.paypal.me/bbatsov),
  [Salt](https://salt.bountysource.com/teams/projectile),
  [Patreon](https://www.patreon.com/bbatsov) and [Liberapay](https://liberapay.com/bbatsov/donate).
 
@@ -81,20 +83,21 @@ You can install Projectile with the following command:
 Alternatively, users of Debian 9 or later or Ubuntu 16.04 or later may
 simply `apt-get install elpa-projectile`.
 
+Finally add this to your Emacs config:
+
+```el
+(projectile-mode +1)
+(define-key projectile-mode-map (kbd "s-p") 'projectile-command-map)
+(define-key projectile-mode-map (kbd "C-c p") 'projectile-command-map)
+```
+
+Those keymap prefixes are just a suggestion. Feel free to put there whatever works best for you.
+
 ### Basic Usage
 
 Enable `projectile-mode`, open a file in one of your projects and type a command such as <kbd>C-c p f</kbd>.
 
 See the user manual for more details.
-
-## Extensions
-
-There are a number of packages that built on top of the basic functionality provided by Projectile:
-
-* [counsel-projectile](https://github.com/ericdanan/counsel-projectile) provides Ivy integration
-* [helm-projectile](https://github.com/bbatsov/helm-projectile) provides Helm integration
-* [persp-projectile](https://github.com/bbatsov/persp-projectile) provides perspective.el integration
-* [projectile-rails](https://github.com/asok/projectile-rails) provides extra functionality for Ruby on Rails projects
 
 ## Caveats
 
