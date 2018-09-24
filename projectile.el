@@ -572,6 +572,7 @@ Examples of such paths might be ~/projects, ~/work, etc."
   :type 'list
   :package-version '(projectile . "1.0.0"))
 
+
 (defcustom projectile-p4-command (concat "cat " projectile-project-root "SYNC.log | sed 's/.* //g' | tr '\\n' '\\0'" )
   "Command used by projectile to get the files in a generic project."
   :group 'projectile
@@ -1037,7 +1038,6 @@ Defaults to the current directory if not provided
 explicitly."
   (projectile-project-root (or dir default-directory)))
 
-
 (defun projectile-p4-project-name (project-root)
   "Get the project name for a p4 repo; will print codeline/branch and directorie"
   (let ((cfgfile (concat project-root "configuration_id")))
@@ -1049,6 +1049,7 @@ explicitly."
             ))
       (file-name-nondirectory (directory-file-name project-root))
       )))
+
 
 (defun projectile-default-project-name (project-root)
   "Default function used create project name to be displayed based on the value of PROJECT-ROOT."
@@ -1099,7 +1100,6 @@ Files are returned as relative paths to the project ROOT."
     (mapcar (lambda (file)
               (file-relative-name (expand-file-name file directory) root))
             (projectile-get-repo-files))))
-
 
 
 (defun projectile-get-ext-command ()
@@ -2116,6 +2116,7 @@ With a prefix arg INVALIDATE-CACHE invalidates the cache first."
   (interactive "P")
   (projectile--find-file invalidate-cache #'find-file-other-frame))
 
+
 ;;;###autoload
 (defun projectile-toggle-project-read-only ()
   "Toggle project read only"
@@ -2129,6 +2130,7 @@ With a prefix arg INVALIDATE-CACHE invalidates the cache first."
     (when buffer-file-name
       (read-only-mode (if val +1 -1))
       (message "Projectile: project read-only-mode is %s" (if val "on" "off")))))
+
 
 
 ;;;; Sorting project files
